@@ -1,6 +1,7 @@
-package net.catten.property.editor.app
+package net.catten.property.editor.app.views
 
-import net.catten.property.editor.app.editor.JsonEditorView
+import net.catten.property.editor.app.UIApplication
+import net.catten.property.editor.app.views.editor.JsonEditorView
 import net.catten.property.editor.utils.*
 import org.slf4j.LoggerFactory
 import java.awt.BorderLayout
@@ -12,21 +13,21 @@ import javax.swing.JFrame
 import javax.swing.JMenuItem
 import javax.swing.SwingUtilities
 import javax.swing.filechooser.FileNameExtensionFilter
-import kotlin.math.log
 import kotlin.properties.Delegates.notNull
 import kotlin.properties.Delegates.observable
 
-class PropertyEditorMainViewController private constructor(val app: UIApplication) {
+class PropertyEditorMainViewController (val app: UIApplication) {
     private val logger = LoggerFactory.getLogger(this::class.java)
 
     private var defaultOptionDirectory = File(".")
 
-    private val frame = JFrame().apply {
+    val frame = JFrame().apply {
         title = DEFAULT_APP_TITLE
+        setLocationRelativeTo(null)
         iconImage = ImageIO.read(ResourceLoader.getResourceUrl("assets/icons/app_icon.png"))
     }
 
-    var title by observable(DEFAULT_APP_TITLE) { _, _, n -> SwingUtilities.invokeLater { frame.title = n } }
+    var title by observable(DEFAULT_APP_TITLE) { _, _, n -> swingInvokeLater { frame.title = n } }
         private set
 
     private var openMenuItem: JMenuItem by notNull()
@@ -40,35 +41,37 @@ class PropertyEditorMainViewController private constructor(val app: UIApplicatio
         }
     }
 
+    private val jsonEditorView = JsonEditorView(app)
+
     private fun onOpenFile() = SwingUtilities.invokeLater {
         when (val result = fileChooser.showOpenDialog(frame)) {
             JFileChooser.APPROVE_OPTION -> {
-                val editor = JsonEditorView.instance
-                val noFile = NoFileViewController.instance
-                logger.info("user selected file {}", fileChooser.selectedFile)
-                noFile.frame.isEnabled = false
-                editor.loadFile(fileChooser.selectedFile) {
-                    if (it.isSuccess) {
-                        frame.remove(NoFileViewController.instance.frame)
-                        frame.add(editor.frame, BorderLayout.CENTER)
-                        SwingUtilities.invokeLater {
-                            frame.revalidate()
-                            frame.repaint()
-                        }
-                    } else {
-                        logger.error("load failed",it.exceptionOrNull())
-                    }
-                }
-                NoFileViewController.instance.frame.isEnabled = true
+                val file = fileChooser.selectedFile
+                logger.info("user selected file {}", file)
+                loadFile(file)
             }
-
             else -> logger.info("command canceled by user, result: {}", result)
         }
     }
 
-    private fun onSaveAs() {
-        JsonEditorView.instance.onSave()
+    fun loadFile(file : File) = jsonEditorView.loadFile(file) {
+        if (it.isSuccess) swingInvokeLater {
+            val noFile = NoFileViewController.instance
+            noFile.frame.isEnabled = false
+            logger.info("Loaded file '{}'.", file.absolutePath)
+            frame.remove(noFile.frame)
 
+            frame.add(jsonEditorView.frame, BorderLayout.CENTER)
+            noFile.frame.isEnabled = true
+            frame.revalidate()
+            frame.repaint()
+        } else {
+            logger.error("load failed",it.exceptionOrNull())
+        }
+    }
+
+    private fun onSaveAs() {
+        jsonEditorView.onSave()
     }
 
     private fun buildMainMenu() = jMenuBar {
@@ -90,6 +93,10 @@ class PropertyEditorMainViewController private constructor(val app: UIApplicatio
         }
     }
 
+    init {
+        initialization()
+    }
+
     private fun initialization() {
         frame.jMenuBar = buildMainMenu()
         frame.size = Dimension(640, 480)
@@ -103,16 +110,6 @@ class PropertyEditorMainViewController private constructor(val app: UIApplicatio
     }
 
     companion object {
-        fun create(app: UIApplication) {
-            val appFrame = PropertyEditorMainViewController(app).apply { initialization() }
-
-            with(appFrame.frame) {
-                setLocationRelativeTo(null)
-                defaultCloseOperation = JFrame.EXIT_ON_CLOSE
-                isVisible = true
-            }
-        }
-
         private const val DEFAULT_APP_TITLE = "Property Editor"
     }
 }

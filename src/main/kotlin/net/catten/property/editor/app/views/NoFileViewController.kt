@@ -1,4 +1,4 @@
-package net.catten.property.editor.app
+package net.catten.property.editor.app.views
 
 import net.catten.property.editor.utils.UIProperties
 import java.awt.Component
