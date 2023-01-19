@@ -1,18 +1,26 @@
 package net.catten.property.editor.app
 
+import net.catten.property.editor.utils.UIAppCriticalErrorMessage
+import net.catten.property.editor.utils.addWindowClosingListener
+import net.catten.property.editor.utils.promptSwingDialog
+import net.catten.property.editor.utils.tryDo
 import org.slf4j.LoggerFactory
-import java.awt.event.WindowAdapter
-import java.awt.event.WindowEvent
-import java.io.File
-import java.io.FileWriter
+import java.nio.ByteBuffer
+import java.nio.channels.FileChannel
+import java.nio.channels.FileLock
+import java.nio.charset.StandardCharsets
+import java.nio.file.Path
+import java.nio.file.StandardOpenOption
+import java.rmi.activation.ActivationGroup
 import java.util.*
 import java.util.concurrent.Executor
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.swing.JFrame
+import kotlin.jvm.optionals.getOrNull
 import kotlin.system.exitProcess
 
-class UIApplication(val commandLineArguments: Array<String>) {
+class UIApplication private constructor(val commandLineArguments: Array<String>, val environment: UIApplicationEnvironment) {
     val logger = LoggerFactory.getLogger(this::class.java)
 
     private val applicationClosing = AtomicBoolean(false)
@@ -20,30 +28,23 @@ class UIApplication(val commandLineArguments: Array<String>) {
 
     val ioExecutor: Executor = Executors.newWorkStealingPool()
 
-    fun registerMainWindow(provider: (UIApplication) -> JFrame, showNow: Boolean = true) {
-        if (applicationClosing.get()) {
-            logger.warn("Application is closing but mainWindow creation incomes.")
-            return
-        }
-
-        val frame = provider(this)
-        mainWindowLists.add(frame)
-
-        frame.addWindowListener(object : WindowAdapter() {
-            override fun windowClosing(e: WindowEvent) {
+    fun registerMainWindow(showNow: Boolean = true, mainFrameProvider: (UIApplication) -> JFrame) {
+        if (applicationClosing.get()) return logger.warn("Application is closing but mainWindow creation incomes.")
+        mainFrameProvider(this).also { mainWindowLists.add(it) }.apply {
+            addWindowClosingListener { e ->
                 val window = e.window
                 e.window.dispose()
                 mainWindowLists.remove(window)
                 logger.info("A main window was closed.")
                 onAnyMainWindowCloses()
             }
-        })
-
-        frame.isVisible = showNow
+            isVisible = showNow
+        }
     }
 
     private fun onAnyMainWindowCloses() {
         if (applicationClosing.get()) return
+
         if (mainWindowLists.isEmpty()) {
             applicationClosing.set(true)
             logger.info("All window closed. Application Exit.")
@@ -53,55 +54,87 @@ class UIApplication(val commandLineArguments: Array<String>) {
         }
     }
 
-    class Environment : EnvironmentProperties() {
-        val configDir by provider {
-            property("net.catten.PropertyEditor.configDir")
-            environment("PROPERTY_EDITOR_CONFIG_DIR")
-            ifNotFoundThenLog("Application settings will not be persistent.")
+    val registry = UIApplicationRegistry(environment)
+
+    val currentProcessInfo by lazy { tryDo { ProcessHandle.current().pid() } }
+
+    val instanceProcessInfo = registry.configurationFile?.let {
+        UIApplicationInstanceProcessInformation.fromPidFilePath(Path.of(it.absolutePath, ".pid"))
+    }
+
+    class ProcessInformation private constructor(val processId: Long, val command : String, val arguments : Array<String>) {
+        companion object {
+            fun from(handle : ProcessHandle) : ProcessInformation? {
+                val pid = tryDo { handle.pid() } ?: return null
+                val info = tryDo { handle.info() } ?: return null
+                val command = tryDo { info.command().orElse(null) } ?: return null
+                val arguments = tryDo { info.arguments().orElse(emptyArray()) } ?: return null
+
+                return ProcessInformation(pid, command, arguments)
+            }
+
+            fun of(pid : Long) = tryDo { ProcessHandle.of(pid).map(::from).orElse(null) }
+
+            fun current() = tryDo { from(ProcessHandle.current()) }
         }
     }
 
-    val environment = Environment()
+    class UIApplicationInstanceProcessInformation private constructor(
+        val processId : Long, val processIdFilePath : Path, val processIdFileLock: FileLock?
+    ) {
+        companion object {
+            fun fromPidFilePath(path : Path) : UIApplicationInstanceProcessInformation? {
+                val pidFile = path.toFile()
+                // Try to lock the pid file
+                val pidFileLock = tryDo { FileChannel.open(path, StandardOpenOption.WRITE).tryLock() }
 
-    class Registry(env: Environment) : PropertyRegistry() {
-        private val logger = LoggerFactory.getLogger(this::class.java)
+                // if failed to get current process id, consider as not supported
+                val currentProcessInfo = ProcessInformation.current() ?: return null
 
-        var appEditorViewSplitPanePosition by integer("app.editor.split_pane.position").withDefault(100)
-        var appEditorViewValueTableKeyWidth by integer("app.editor.value_editor.key.width").withDefault(100)
-        var appEditorViewValueTableColumWidth by register(
-            "app.editor.value_editor.table.column_widths",
-            { it.joinToString(",") { int -> int.toString() } },
-            { it.split(",").map { str -> str.toInt() } }
-        ).withDefault(listOf(15,15))
+                // When could not acquire the pid file lock
+                if(pidFileLock == null) {
+                    // if pid file not exists or not a file, consider as not supported
+                    if(!pidFile.isFile) return null
 
-        private val configFile = env.configDir?.let { File(it, "app.properties") }
+                    // read the shared instance pid. if pid file content is invalid, consider as not supported
+                    val instancePid = String(pidFile.readBytes(), StandardCharsets.UTF_8).toLongOrNull() ?: return null
 
-        init {
-            initConfig()
-        }
+                    // check the shared process instance. if failed to get the process handle, consider as not supported
+                    val sharedInstanceProcess = ProcessInformation.of(instancePid) ?: return null
 
-        private fun initConfig() {
-            val file = configFile ?: return
-            if (!(file.exists() && file.isFile)) return logger.info("Application settings '{}' does not exists. Will not load.", file.absolutePath)
-
-            logger.info("Loading application settings from '{}'.", configFile.absolutePath)
-            replaceWith(file.readLines().mapNotNull {
-                when (val pos = it.indexOf('=')) {
-                    -1 -> null
-                    else -> it.substring(0, pos) to it.substring(pos + 1)
+                    // return the shared instance process status
+                    return UIApplicationInstanceProcessInformation(instancePid, pidFile.toPath(), null)
                 }
-            }.toMap())
-        }
 
-        internal fun saveConfig() {
-            val file = configFile ?: return
-            if (!(file.parentFile.exists() && file.parentFile.isDirectory))
-                return logger.info("Directory '{}' does not exists. Application settings will not be saved.", file.parentFile.absolutePath)
-
-            logger.info("Saving application settings to '{}'.", configFile.absolutePath)
-            FileWriter(file).use { writer -> values().entries.forEach { writer.write("${it.key}=${it.value}\n") } }
+                try {
+                    FileChannel.open(path, StandardOpenOption.WRITE).tryLock()?.let { lock ->
+                        val currentProcessId = ProcessHandle.current().pid()
+                        val channel = lock.channel().apply {
+                            val content = currentProcessId.toString().toByteArray()
+                            truncate(content.size.toLong())
+                            write(ByteBuffer.wrap(content))
+                        }
+                        Runtime.getRuntime().addShutdownHook(Thread { channel.close() })
+                        UIApplicationInstanceProcessInformation(currentProcessId, path, lock)
+                    }
+                } catch (e : Exception) {
+                    null
+                }
+            }
         }
     }
 
-    val registry = Registry(environment)
+    companion object {
+        operator fun invoke(args: Array<String> = emptyArray(), env: UIApplicationEnvironment = UIApplicationEnvironment(), block: UIApplication.() -> Unit) {
+            try {
+                block(UIApplication(args, env))
+            } catch (e: Exception) {
+                UIAppCriticalErrorMessage(
+                    "Critical Error",
+                    "Application bootstrap meets an critical error.\n${e.message}",
+                    e
+                ).promptSwingDialog(0)
+            }
+        }
+    }
 }

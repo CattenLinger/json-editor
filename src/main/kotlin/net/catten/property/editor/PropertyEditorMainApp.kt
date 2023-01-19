@@ -4,29 +4,23 @@ import com.formdev.flatlaf.FlatIntelliJLaf
 import com.formdev.flatlaf.extras.FlatInspector
 import com.formdev.flatlaf.util.SystemInfo
 import net.catten.property.editor.app.UIApplication
+import net.catten.property.editor.app.UIApplicationEnvironment
 import net.catten.property.editor.app.views.PropertyEditorMainViewController
-import net.catten.property.editor.utils.UIAppCriticalErrorMessage
-import net.catten.property.editor.utils.promptSwingDialog
+import net.catten.property.editor.utils.swingInvokeAndWait
 import java.io.File
-import javax.swing.SwingUtilities
+import java.lang.RuntimeException
 
-fun main(args: Array<String>) = try {
-    val uiApplication = UIApplication(args)
-    SwingUtilities.invokeAndWait {
+fun main(args: Array<String>) = UIApplication(args) {
+
+
+    swingInvokeAndWait {
         setupFlatLaf()
-        val mainView = PropertyEditorMainViewController(uiApplication)
-        uiApplication.registerMainWindow({ mainView.frame })
+        val mainView = PropertyEditorMainViewController(this).also { view -> registerMainWindow { view.frame } }
         if (args.isNotEmpty()) {
             val file = File(args[0])
             if (file.isFile && file.exists()) mainView.loadFile(file)
         }
     }
-} catch (e: Exception) {
-    UIAppCriticalErrorMessage(
-        "Critical Error",
-        "Application bootstrap meets an critical error.\n${e.message}",
-        e
-    ).promptSwingDialog(0)
 }
 
 private fun setupFlatLaf() {

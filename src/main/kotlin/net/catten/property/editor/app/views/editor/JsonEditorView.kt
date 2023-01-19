@@ -96,9 +96,9 @@ class JsonEditorView(val app: UIApplication) {
         viewValueEditor.frame
     ).apply {
         addPropertyChangeListener(JSplitPane.DIVIDER_LOCATION_PROPERTY) {
-            app.registry.appEditorViewSplitPanePosition = (it.newValue as Number).toInt()
+//            app.registry.appEditorViewSplitPanePosition = (it.newValue as Number).toInt()
         }
-        SwingUtilities.invokeLater { dividerLocation = app.registry.appEditorViewSplitPanePosition }
+//        SwingUtilities.invokeLater { dividerLocation = app.registry.appEditorViewSplitPanePosition }
     }
 
     val frame = JPanel(BorderLayout()).apply {

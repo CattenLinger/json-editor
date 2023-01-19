@@ -7,12 +7,14 @@ import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.properties.ReadOnlyProperty
 import kotlin.reflect.KProperty
 
-abstract class EnvironmentProperties {
-    private val logger: Logger = LoggerFactory.getLogger(this::class.java)
+abstract class EnvironmentPropertyResolver {
+    protected val logger: Logger = LoggerFactory.getLogger(this::class.java)
 
-    protected fun provider(config : PropertyProvider.Configuration.() -> Unit) : PropertyProvider {
-        return PropertyProvider(config)
-    }
+    private val registeredProviders = LinkedList<PropertyProvider>()
+
+    fun reloadAll() = registeredProviders.forEach { it.reloadValue() }
+
+    protected fun provider(config : PropertyProvider.Configuration.() -> Unit) = PropertyProvider(config).also { registeredProviders.add(it) }
 
     fun PropertyProvider.Configuration.ifNotFoundThenLog(append : String = "") {
         whenNotFound = { src -> logger.info("{} not found. {}", src.joinToString(" or ") { """"${it.keyName}(${it.sourceName})"""" } , append) }

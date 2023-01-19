@@ -131,13 +131,13 @@ class JsonValueEditorView(app: UIApplication) {
 
         fun onTableWidthChangeListener(event: PropertyChangeEvent) {
             if (event.propertyName == "width") {
-                app.registry.appEditorViewValueTableColumWidth = columnModel.columns.toList().map { it.width }
+//                app.registry.appEditorViewValueTableColumWidth = columnModel.columns.toList().map { it.width }
             }
         }
 
         columnModel.forEachColumnIndexed { index, column ->
             column.addPropertyChangeListener(::onTableWidthChangeListener)
-            column.preferredWidth = app.registry.appEditorViewValueTableColumWidth.getOrElse(index) { 15 }
+//            column.preferredWidth = app.registry.appEditorViewValueTableColumWidth.getOrElse(index) { 15 }
         }
 
         selectionModel.addListSelectionListener { onTableSelectionChanged() }
