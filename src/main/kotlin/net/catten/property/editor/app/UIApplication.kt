@@ -58,11 +58,11 @@ class UIApplication private constructor(val commandLineArguments: Array<String>,
 
     val registry = UIApplicationRegistry(environment)
 
-    val currentProcessInfo by lazy { tryDo { ProcessHandle.current().pid() } }
-
-    val instanceProcessInfo = registry.configurationFile?.let {
-        UIApplicationInstanceProcessInformation.fromPidFilePath(Path.of(it.absolutePath, ".pid"))
-    }
+//    val currentProcessInfo by lazy { tryDo { ProcessHandle.current().pid() } }
+//
+//    val instanceProcessInfo = registry.configurationFile?.let {
+//        UIApplicationInstanceProcessInformation.fromPidFilePath(Path.of(it.absolutePath, ".pid"))
+//    }
 
     class UIApplicationInstanceProcessInformation private constructor(val processId : Long, val processIdFilePath : Path, val processIdFileLock: FileLock?) {
         companion object {

@@ -11,8 +11,6 @@ import java.io.File
 import java.lang.RuntimeException
 
 fun main(args: Array<String>) = UIApplication(args) {
-
-
     swingInvokeAndWait {
         setupFlatLaf()
         val mainView = PropertyEditorMainViewController(this).also { view -> registerMainWindow { view.frame } }
