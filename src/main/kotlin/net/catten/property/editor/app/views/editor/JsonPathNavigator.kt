@@ -1,17 +1,30 @@
 package net.catten.property.editor.app.views.editor
 
 import net.catten.property.editor.utils.swingInvokeLater
+import java.awt.event.KeyListener
 import javax.swing.*
+import javax.swing.text.DefaultEditorKit
 
 class JsonPathNavigator {
+    private val popupMenu = JPopupMenu()
     private val tfPath = JTextField()
+
+    init {
+        tfPath.isEditable = false
+        val copyMenuItem = JMenuItem("Copy Path").apply {
+            mnemonic = 'C'.code
+            addActionListener(DefaultEditorKit.CopyAction())
+        }
+        popupMenu.add(copyMenuItem)
+        tfPath.componentPopupMenu = popupMenu
+        
+    }
 
 //    val btnGoPath = JButton("Go")
 
     val frame = JPanel().apply {
         layout = BoxLayout(this, BoxLayout.X_AXIS)
         // https://stackoverflow.com/questions/5854005/setting-horizontal-and-vertical-margins
-//        border = BorderFactory.createEmptyBorder(0, 3, 3, 3)
         border = BorderFactory.createEmptyBorder(3, 3, 3, 3)
 
         add(JLabel("Path: "))

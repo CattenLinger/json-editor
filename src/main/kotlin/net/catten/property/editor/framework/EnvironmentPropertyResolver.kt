@@ -1,4 +1,4 @@
-package net.catten.property.editor.app
+package net.catten.property.editor.framework
 
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
