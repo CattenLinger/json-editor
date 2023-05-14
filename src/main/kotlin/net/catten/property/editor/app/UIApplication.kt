@@ -1,26 +1,28 @@
 package net.catten.property.editor.app
 
+import net.catten.property.editor.framework.SimpleProcessInformation
 import net.catten.property.editor.utils.UIAppCriticalErrorMessage
 import net.catten.property.editor.utils.addWindowClosingListener
 import net.catten.property.editor.utils.promptSwingDialog
 import net.catten.property.editor.utils.tryDo
 import org.slf4j.LoggerFactory
+import java.awt.Desktop
 import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
 import java.nio.channels.FileLock
 import java.nio.charset.StandardCharsets
 import java.nio.file.Path
 import java.nio.file.StandardOpenOption
-import java.rmi.activation.ActivationGroup
 import java.util.*
 import java.util.concurrent.Executor
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.swing.JFrame
-import kotlin.jvm.optionals.getOrNull
 import kotlin.system.exitProcess
 
 class UIApplication private constructor(val commandLineArguments: Array<String>, val environment: UIApplicationEnvironment) {
+    // standalone mode: no system ui integration, allow multiple instance,
+
     val logger = LoggerFactory.getLogger(this::class.java)
 
     private val applicationClosing = AtomicBoolean(false)
@@ -61,68 +63,49 @@ class UIApplication private constructor(val commandLineArguments: Array<String>,
 //    val instanceProcessInfo = registry.configurationFile?.let {
 //        UIApplicationInstanceProcessInformation.fromPidFilePath(Path.of(it.absolutePath, ".pid"))
 //    }
-//
-//    class ProcessInformation private constructor(val processId: Long, val command : String, val arguments : Array<String>) {
-//        companion object {
-//            fun from(handle : ProcessHandle) : ProcessInformation? {
-//                val pid = tryDo { handle.pid() } ?: return null
-//                val info = tryDo { handle.info() } ?: return null
-//                val command = tryDo { info.command().orElse(null) } ?: return null
-//                val arguments = tryDo { info.arguments().orElse(emptyArray()) } ?: return null
-//
-//                return ProcessInformation(pid, command, arguments)
-//            }
-//
-//            fun of(pid : Long) = tryDo { ProcessHandle.of(pid).map(::from).orElse(null) }
-//
-//            fun current() = tryDo { from(ProcessHandle.current()) }
-//        }
-//    }
-//
-//    class UIApplicationInstanceProcessInformation private constructor(
-//        val processId : Long, val processIdFilePath : Path, val processIdFileLock: FileLock?
-//    ) {
-//        companion object {
-//            fun fromPidFilePath(path : Path) : UIApplicationInstanceProcessInformation? {
-//                val pidFile = path.toFile()
-//                // Try to lock the pid file
-//                val pidFileLock = tryDo { FileChannel.open(path, StandardOpenOption.WRITE).tryLock() }
-//
-//                // if failed to get current process id, consider as not supported
-//                val currentProcessInfo = ProcessInformation.current() ?: return null
-//
-//                // When could not acquire the pid file lock
-//                if(pidFileLock == null) {
-//                    // if pid file not exists or not a file, consider as not supported
-//                    if(!pidFile.isFile) return null
-//
-//                    // read the shared instance pid. if pid file content is invalid, consider as not supported
-//                    val instancePid = String(pidFile.readBytes(), StandardCharsets.UTF_8).toLongOrNull() ?: return null
-//
-//                    // check the shared process instance. if failed to get the process handle, consider as not supported
-//                    val sharedInstanceProcess = ProcessInformation.of(instancePid) ?: return null
-//
-//                    // return the shared instance process status
-//                    return UIApplicationInstanceProcessInformation(instancePid, pidFile.toPath(), null)
-//                }
-//
-//                try {
-//                    FileChannel.open(path, StandardOpenOption.WRITE).tryLock()?.let { lock ->
-//                        val currentProcessId = ProcessHandle.current().pid()
-//                        val channel = lock.channel().apply {
-//                            val content = currentProcessId.toString().toByteArray()
-//                            truncate(content.size.toLong())
-//                            write(ByteBuffer.wrap(content))
-//                        }
-//                        Runtime.getRuntime().addShutdownHook(Thread { channel.close() })
-//                        UIApplicationInstanceProcessInformation(currentProcessId, path, lock)
-//                    }
-//                } catch (e : Exception) {
-//                    null
-//                }
-//            }
-//        }
-//    }
+
+    class UIApplicationInstanceProcessInformation private constructor(val processId : Long, val processIdFilePath : Path, val processIdFileLock: FileLock?) {
+        companion object {
+            fun fromPidFilePath(path : Path) : UIApplicationInstanceProcessInformation? {
+                val pidFile = path.toFile()
+                // Try to lock the pid file
+                val pidFileLock = tryDo { FileChannel.open(path, StandardOpenOption.WRITE).tryLock() }
+
+                // if failed to get current process id, consider as not supported
+                val currentProcessInfo = SimpleProcessInformation.current() ?: return null
+
+                // When could not acquire the pid file lock
+                if(pidFileLock == null) {
+                    // if pid file not exists or not a file, consider as not supported
+                    if(!pidFile.isFile) return null
+
+                    // read the shared instance pid. if pid file content is invalid, consider as not supported
+                    val instancePid = String(pidFile.readBytes(), StandardCharsets.UTF_8).toLongOrNull() ?: return null
+
+                    // check the shared process instance. if failed to get the process handle, consider as not supported
+                    val sharedInstanceProcess = SimpleProcessInformation.of(instancePid) ?: return null
+
+                    // return the shared instance process status
+                    return UIApplicationInstanceProcessInformation(instancePid, pidFile.toPath(), null)
+                }
+
+                return try {
+                    FileChannel.open(path, StandardOpenOption.WRITE).tryLock()?.let { lock ->
+                        val currentProcessId = ProcessHandle.current().pid()
+                        val channel = lock.channel().apply {
+                            val content = currentProcessId.toString().toByteArray()
+                            truncate(content.size.toLong())
+                            write(ByteBuffer.wrap(content))
+                        }
+                        Runtime.getRuntime().addShutdownHook(Thread { channel.close() })
+                        UIApplicationInstanceProcessInformation(currentProcessId, path, lock)
+                    }
+                } catch (e : Exception) {
+                    null
+                }
+            }
+        }
+    }
 
     companion object {
         operator fun invoke(args: Array<String> = emptyArray(), env: UIApplicationEnvironment = UIApplicationEnvironment(), block: UIApplication.() -> Unit) {

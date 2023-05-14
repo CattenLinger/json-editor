@@ -2,6 +2,7 @@ package net.catten.property.editor.app.views.editor
 
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.node.JsonNodeType
+import kotlin.streams.toList
 
 abstract class ConfigValue(val name : String) {
     abstract val value : Any?
