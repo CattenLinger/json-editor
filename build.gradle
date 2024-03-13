@@ -1,0 +1,36 @@
+buildscript {
+    ext {
+        java_version    = "1.8"
+        jackson_version = "2.13.0"
+    }
+}
+
+plugins {
+    id "org.jetbrains.kotlin.jvm" version "1.9.0"
+    id "application"
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'org.jetbrains:annotations:13.0'
+    implementation 'com.fifesoft:rsyntaxtextarea:3.4.0'
+    implementation 'com.formdev:flatlaf:3.4'
+    implementation 'com.formdev:flatlaf-extras:3.4'
+    implementation 'com.formdev:svgSalamander:1.1.4'
+    implementation 'ch.qos.logback:logback-classic:1.4.4'
+    implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.13.0'
+    implementation 'com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.13.0'
+}
+
+kotlin {
+    jvmToolchain(17)
+}
+
+compileKotlin { kotlinOptions.jvmTarget = java_version }
+compileTestKotlin { kotlinOptions.jvmTarget = java_version }
+compileJava { sourceCompatibility = 8 }
+compileTestJava { sourceCompatibility = 8 }
+

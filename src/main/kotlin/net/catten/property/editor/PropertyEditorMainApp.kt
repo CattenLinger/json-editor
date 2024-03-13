@@ -4,11 +4,9 @@ import com.formdev.flatlaf.FlatIntelliJLaf
 import com.formdev.flatlaf.extras.FlatInspector
 import com.formdev.flatlaf.util.SystemInfo
 import net.catten.property.editor.app.UIApplication
-import net.catten.property.editor.app.UIApplicationEnvironment
 import net.catten.property.editor.app.views.PropertyEditorMainViewController
 import net.catten.property.editor.utils.swingInvokeAndWait
 import java.io.File
-import java.lang.RuntimeException
 
 fun main(args: Array<String>) = UIApplication(args) {
     swingInvokeAndWait {
